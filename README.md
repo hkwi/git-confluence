@@ -75,6 +75,23 @@ go build .
 `go build .` writes a `git-confluence` binary at the repository root. During
 development, `go run . ...` also works.
 
+## Install
+
+Install the tagged release with Go:
+
+```sh
+go install github.com/hkwi/git-confluence@v0.1.0
+```
+
+Prebuilt archives for Linux, macOS, and Windows are published on the GitHub
+Releases page. Each release includes `checksums.txt`.
+
+Check the installed binary:
+
+```sh
+git-confluence version
+```
+
 ## Filter Configuration
 
 Place this repository wherever you want, then configure the filter in the

@@ -4,15 +4,23 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strconv"
 
-	"git-confluence/internal/confluence"
+	"github.com/hkwi/git-confluence/internal/confluence"
 )
 
 const (
+	appName              = "git-confluence"
 	defaultMaxInputBytes = int64(64 << 20)
 	maxInputBytesEnv     = "GIT_CONFLUENCE_MAX_INPUT_BYTES"
 	maxRecursionDepthEnv = "GIT_CONFLUENCE_MAX_RECURSION_DEPTH"
+)
+
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func main() {
@@ -21,21 +29,27 @@ func main() {
 		os.Exit(2)
 	}
 
+	switch os.Args[1] {
+	case "version", "--version", "-version":
+		fmt.Print(versionOutput())
+		return
+	}
+
 	maxInput, err := maxInputBytes()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "git-confluence-filter: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
 		os.Exit(2)
 	}
 
 	maxDepth, err := maxRecursionDepth()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "git-confluence-filter: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
 		os.Exit(2)
 	}
 
 	input, err := readLimitedInput(os.Stdin, maxInput)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "git-confluence-filter: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
 		os.Exit(1)
 	}
 
@@ -43,14 +57,14 @@ func main() {
 	case "clean":
 		storage, err := confluence.MarkdownToStorageWithMaxDepth(string(input), maxDepth)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "git-confluence-filter: %v\n", err)
+			fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
 			os.Exit(1)
 		}
 		fmt.Print(storage)
 	case "smudge":
 		markdown, err := confluence.StorageToMarkdownWithMaxDepth(string(input), maxDepth)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "git-confluence-filter: %v\n", err)
+			fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
 			os.Exit(1)
 		}
 		fmt.Print(markdown)
@@ -61,7 +75,22 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: git-confluence-filter clean|smudge")
+	fmt.Fprintf(os.Stderr, "usage: %s clean|smudge|version\n", appName)
+}
+
+func versionOutput() string {
+	return fmt.Sprintf("%s %s\ncommit: %s\nbuilt: %s\n", appName, releaseVersion(), commit, date)
+}
+
+func releaseVersion() string {
+	if version != "dev" {
+		return version
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok || info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return version
+	}
+	return info.Main.Version
 }
 
 func maxInputBytes() (int64, error) {
