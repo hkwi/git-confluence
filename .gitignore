@@ -1,0 +1,6 @@
+/git-confluence
+*.test
+coverage.out
+core
+core.*
+.cache/
