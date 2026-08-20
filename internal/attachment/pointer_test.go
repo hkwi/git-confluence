@@ -124,7 +124,7 @@ func TestSmudgeWithoutPATLeavesPointer(t *testing.T) {
 	}
 }
 
-func TestSmudgeDownloadErrorIdentifiesWorktreePath(t *testing.T) {
+func TestSmudgeSizeMismatchWarnsAndUsesDownloadedContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("wrong size"))
 	}))
@@ -147,10 +147,11 @@ func TestSmudgeDownloadErrorIdentifiesWorktreePath(t *testing.T) {
 	if err := Smudge(pointer, worktreePath, &output, &errorOutput); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(output.Bytes(), pointer) {
-		t.Fatalf("smudge output:\n%s", output.Bytes())
+	if output.String() != "wrong size" {
+		t.Fatalf("smudge output = %q", output.String())
 	}
-	if !strings.Contains(errorOutput.String(), `attachment "`+worktreePath+`": attachment size mismatch`) {
+	wantWarning := `git-confluence: warning: attachment "` + worktreePath + `": pointer size is 42 bytes, but downloaded content is 10 bytes; using downloaded content`
+	if !strings.Contains(errorOutput.String(), wantWarning) {
 		t.Fatalf("stderr = %q", errorOutput.String())
 	}
 }

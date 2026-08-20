@@ -48,7 +48,7 @@ func Smudge(pointerData []byte, worktreePath string, output, errorOutput io.Writ
 		_, err = output.Write(canonical)
 		return err
 	}
-	path, err := download(cache, pointer, canonical, worktreePath, pat)
+	path, err := download(cache, pointer, canonical, worktreePath, pat, errorOutput)
 	if err != nil {
 		fmt.Fprintf(errorOutput, "git-confluence: attachment %q: %v; leaving attachment pointer in working tree\n", worktreePath, err)
 		_, writeErr := output.Write(canonical)
@@ -111,7 +111,7 @@ func Clean(input io.Reader, worktreePath string, output io.Writer) error {
 	return err
 }
 
-func download(cache cache, pointer Pointer, canonical []byte, worktreePath, pat string) (string, error) {
+func download(cache cache, pointer Pointer, canonical []byte, worktreePath, pat string, warningOutput io.Writer) (string, error) {
 	downloadURL, err := pointer.DownloadURL()
 	if err != nil {
 		return "", err
@@ -160,7 +160,7 @@ func download(cache cache, pointer Pointer, canonical []byte, worktreePath, pat 
 		return "", fmt.Errorf("attachment exceeds %d bytes; set %s to a larger byte count", maxBytes, maxAttachmentEnv)
 	}
 	if pointer.Size > 0 && written != pointer.Size {
-		return "", fmt.Errorf("attachment size mismatch: pointer has %d bytes, downloaded %d", pointer.Size, written)
+		fmt.Fprintf(warningOutput, "git-confluence: warning: attachment %q: pointer size is %d bytes, but downloaded content is %d bytes; using downloaded content\n", worktreePath, pointer.Size, written)
 	}
 	oid := hex.EncodeToString(hash.Sum(nil))
 	return cache.store(tempPath, oid, worktreePath, canonical)
