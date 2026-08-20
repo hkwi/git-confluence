@@ -1,7 +1,8 @@
 # git-confluence
 
-`git-confluence` is a Git clean/smudge filter that converts between
-Confluence storage XML and Markdown.
+`git-confluence` is a unified Git filter for Confluence pages and attachments.
+It converts page bodies between Confluence storage XML and Markdown and
+materializes attachment pointer files through the Confluence download API.
 
 It keeps Confluence storage XML as the content stored in Git while exposing the
 same files as Markdown in the working tree. This lets Confluence keep the XML
@@ -24,9 +25,11 @@ Git remote. Page bodies are stored in Git as Confluence storage XML.
 5. The clean filter converts Markdown back to Confluence storage XML.
 6. `git-remote-confluence` pushes the committed XML to existing Confluence page bodies.
 
-This repository does not call the Confluence API by itself. It reads storage XML
-or Markdown from standard input, converts it, and writes the result to standard
-output.
+Attachment pointers remain small text files when the filter is not configured,
+the PAT is unavailable, or smudge is explicitly skipped. With the filter
+configured, checkout downloads attachment bytes into a local Git-specific cache
+and exposes them at their normal paths. Attachment changes are read-only until
+upload support is implemented.
 
 ## Storage And Working Formats
 
@@ -38,6 +41,14 @@ content shown in the working tree.
 | Git blob | Confluence storage XML |
 | Working tree after checkout | Markdown |
 | Index after `git add` | Confluence storage XML |
+
+For attachments:
+
+| Location | Format |
+| --- | --- |
+| Git blob | Confluence attachment pointer |
+| Working tree after checkout | Attachment bytes, or pointer when unavailable/skipped |
+| Index after `git add` | Original attachment pointer |
 
 This split preserves storage XML for Confluence synchronization while allowing
 people to edit Markdown.
@@ -94,26 +105,32 @@ git-confluence version
 
 ## Filter Configuration
 
-Place this repository wherever you want, then configure the filter in the
-repository that contains Confluence pages:
+Configure the unified page and attachment filter once for the current user:
 
 ```sh
-git config filter.confluence-storage.clean "/path/to/git-confluence/git-confluence clean"
-git config filter.confluence-storage.smudge "/path/to/git-confluence/git-confluence smudge"
-git config filter.confluence-storage.required true
+git confluence install --global
 ```
+
+`install` registers the `filter.confluence` clean/smudge commands in Git
+configuration; it does not install the `git-confluence` executable or download
+attachments.
+
+Use `git confluence install --local` after a `--no-checkout` clone when the
+configuration should apply to only one repository.
 
 Limit the target files with `.gitattributes`:
 
 ```gitattributes
-pages/**/*.md filter=confluence-storage diff=markdown
+*.md filter=confluence diff=markdown
+**/attachments/** filter=confluence -text
 ```
 
 Repositories created by `git-remote-confluence` include this imported
 `.gitattributes` entry:
 
 ```gitattributes
-*.md filter=confluence-storage diff=markdown
+*.md filter=confluence diff=markdown
+**/attachments/** filter=confluence -text
 ```
 
 If you want the first checkout during clone to produce Markdown, configure the
@@ -125,9 +142,7 @@ CONFLUENCE_PAT=... git clone --no-checkout \
   'confluence::https://confluence.example.com/pages/viewpage.action?pageId=123456789' \
   pages
 cd pages
-git config filter.confluence-storage.clean "/path/to/git-confluence/git-confluence clean"
-git config filter.confluence-storage.smudge "/path/to/git-confluence/git-confluence smudge"
-git config filter.confluence-storage.required true
+git confluence install --local
 git checkout
 ```
 
@@ -138,6 +153,22 @@ use it immediately:
 CONFLUENCE_PAT=... git clone \
   'confluence::https://confluence.example.com/pages/viewpage.action?pageId=123456789'
 ```
+
+Keep attachment pointers while still converting page XML to Markdown:
+
+```sh
+GIT_CONFLUENCE_SKIP_SMUDGE=1 git checkout
+```
+
+Materialize all attachments, or selected paths, after checkout:
+
+```sh
+git confluence pull
+git confluence pull 123456789/attachments/diagram.png
+```
+
+`pull` enables the filter locally, refuses to overwrite attachment paths with
+local changes, and reports an error if an attachment could not be materialized.
 
 ## Direct Use
 
@@ -150,6 +181,19 @@ go run . clean < page.md > page.xml
 
 `smudge` converts Confluence storage XML to Markdown. `clean` converts Markdown
 to Confluence storage XML.
+
+## Attachment Authentication And Cache
+
+Attachment download uses the first PAT found in `CONFLUENCE_PAT`,
+`GIT_REMOTE_CONFLUENCE_PAT`, `confluence.pat`, or
+`remote.confluence.pat`. Download URLs are constrained to the Confluence origin
+recorded by the pointer.
+
+Downloaded objects and clean-filter reverse mappings are stored below
+`.git/confluence`. The cache avoids downloading the same pointer again and lets
+the clean filter restore an unchanged attachment to its canonical pointer.
+Unknown attachment bytes are rejected as read-only rather than accidentally
+being committed as large Git blobs.
 
 ## Input Size And Recursion Depth
 

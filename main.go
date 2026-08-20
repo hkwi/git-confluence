@@ -24,7 +24,7 @@ var (
 )
 
 func main() {
-	if len(os.Args) != 2 {
+	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)
 	}
@@ -32,6 +32,18 @@ func main() {
 	switch os.Args[1] {
 	case "version", "--version", "-version":
 		fmt.Print(versionOutput())
+		return
+	case "install":
+		if err := installFilter(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
+			os.Exit(1)
+		}
+		return
+	case "pull":
+		if err := pullFiles(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -47,27 +59,41 @@ func main() {
 		os.Exit(2)
 	}
 
-	input, err := readLimitedInput(os.Stdin, maxInput)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
-		os.Exit(1)
-	}
-
 	switch os.Args[1] {
 	case "clean":
+		input, err := readLimitedInput(os.Stdin, maxInput)
+		if err != nil {
+			fail(err)
+		}
 		storage, err := confluence.MarkdownToStorageWithMaxDepth(string(input), maxDepth)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
-			os.Exit(1)
+			fail(err)
 		}
 		fmt.Print(storage)
 	case "smudge":
+		input, err := readLimitedInput(os.Stdin, maxInput)
+		if err != nil {
+			fail(err)
+		}
 		markdown, err := confluence.StorageToMarkdownWithMaxDepth(string(input), maxDepth)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
-			os.Exit(1)
+			fail(err)
 		}
 		fmt.Print(markdown)
+	case "filter-clean":
+		if len(os.Args) != 3 {
+			fail(fmt.Errorf("filter-clean requires a pathname"))
+		}
+		if err := filterClean(os.Args[2], os.Stdin, os.Stdout, maxInput, maxDepth); err != nil {
+			fail(err)
+		}
+	case "filter-smudge":
+		if len(os.Args) != 3 {
+			fail(fmt.Errorf("filter-smudge requires a pathname"))
+		}
+		if err := filterSmudge(os.Args[2], os.Stdin, os.Stdout, os.Stderr, maxInput, maxDepth); err != nil {
+			fail(err)
+		}
 	default:
 		usage()
 		os.Exit(2)
@@ -75,7 +101,12 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: %s clean|smudge|version\n", appName)
+	fmt.Fprintf(os.Stderr, "usage: %s clean|smudge|filter-clean <path>|filter-smudge <path>|install [--global|--local]|pull [path...]|version\n", appName)
+}
+
+func fail(err error) {
+	fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
+	os.Exit(1)
 }
 
 func versionOutput() string {
