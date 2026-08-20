@@ -50,7 +50,7 @@ func Smudge(pointerData []byte, worktreePath string, output, errorOutput io.Writ
 	}
 	path, err := download(cache, pointer, canonical, worktreePath, pat)
 	if err != nil {
-		fmt.Fprintf(errorOutput, "git-confluence: %v; leaving attachment pointer in working tree\n", err)
+		fmt.Fprintf(errorOutput, "git-confluence: attachment %q: %v; leaving attachment pointer in working tree\n", worktreePath, err)
 		_, writeErr := output.Write(canonical)
 		return writeErr
 	}

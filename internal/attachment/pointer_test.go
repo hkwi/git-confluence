@@ -124,6 +124,37 @@ func TestSmudgeWithoutPATLeavesPointer(t *testing.T) {
 	}
 }
 
+func TestSmudgeDownloadErrorIdentifiesWorktreePath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("wrong size"))
+	}))
+	defer server.Close()
+
+	t.Setenv(cacheDirEnv, t.TempDir())
+	t.Setenv("CONFLUENCE_PAT", "secret")
+	pointer := Pointer{
+		SourceURL:         server.URL,
+		PageID:            "1",
+		AttachmentID:      "2",
+		AttachmentVersion: 3,
+		Filename:          "file.bin",
+		Size:              42,
+		DownloadPath:      "/download/file.bin",
+	}.Canonical()
+	const worktreePath = "1/attachments/file.bin"
+	var output bytes.Buffer
+	var errorOutput bytes.Buffer
+	if err := Smudge(pointer, worktreePath, &output, &errorOutput); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(output.Bytes(), pointer) {
+		t.Fatalf("smudge output:\n%s", output.Bytes())
+	}
+	if !strings.Contains(errorOutput.String(), `attachment "`+worktreePath+`": attachment size mismatch`) {
+		t.Fatalf("stderr = %q", errorOutput.String())
+	}
+}
+
 func TestCleanRejectsUnknownAttachment(t *testing.T) {
 	t.Setenv(cacheDirEnv, t.TempDir())
 	err := Clean(strings.NewReader("locally modified data"), "1/attachments/file.bin", &bytes.Buffer{})
