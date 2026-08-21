@@ -113,7 +113,12 @@ func TestUnifiedFilterMaterializesAttachmentAndCleansBackToPointer(t *testing.T)
 	if err := os.WriteFile(attachmentPath, pointer, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("**/attachments/** filter=confluence -text\n"), 0o644); err != nil {
+	pageStorage := []byte(`<ul style="list-style-type: square;"><li>one</li></ul>`)
+	pagePath := filepath.Join(repo, "1.md")
+	if err := os.WriteFile(pagePath, pageStorage, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("*.md filter=confluence diff=markdown\n**/attachments/** filter=confluence -text\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -127,14 +132,33 @@ func TestUnifiedFilterMaterializesAttachmentAndCleansBackToPointer(t *testing.T)
 	runGit(t, repo, env, "init")
 	runGit(t, repo, env, "config", "user.name", "Test")
 	runGit(t, repo, env, "config", "user.email", "test@example.invalid")
+	runGit(t, repo, env, "add", ".")
+	runGit(t, repo, env, "commit", "-m", "pointer and page storage")
+
 	install := exec.Command(filterPath, "install", "--local")
 	install.Dir = repo
 	install.Env = env
 	if output, err := install.CombinedOutput(); err != nil {
 		t.Fatalf("install filter: %v\n%s", err, output)
 	}
-	runGit(t, repo, env, "add", ".")
-	runGit(t, repo, env, "commit", "-m", "pointer")
+	if status := runGitStdout(t, repo, env, "status", "--short"); status != "" {
+		t.Fatalf("install after checkout marked indexed storage modified: %q", status)
+	}
+	if err := os.Remove(pagePath); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, env, "checkout", "HEAD", "--", "1.md")
+	markdown, err := os.ReadFile(pagePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(markdown, pageStorage) || !bytes.Contains(markdown, []byte("- one")) {
+		t.Fatalf("smudged page = %q", markdown)
+	}
+	if status := runGitStdout(t, repo, env, "status", "--short"); status != "" {
+		t.Fatalf("worktree status after page smudge = %q", status)
+	}
+
 	if err := os.Remove(attachmentPath); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +170,7 @@ func TestUnifiedFilterMaterializesAttachmentAndCleansBackToPointer(t *testing.T)
 	if string(materialized) != "attachment bytes" {
 		t.Fatalf("materialized attachment = %q", materialized)
 	}
-	if status := runGit(t, repo, env, "status", "--short"); status != "" {
+	if status := runGitStdout(t, repo, env, "status", "--short"); status != "" {
 		attr := runGit(t, repo, env, "check-attr", "filter", "--", "1/attachments/file.bin")
 		cleanConfig := runGit(t, repo, env, "config", "--get", "filter.confluence.clean")
 		indexOID := runGit(t, repo, env, "rev-parse", ":1/attachments/file.bin")
@@ -200,4 +224,18 @@ func runGit(t *testing.T, dir string, env []string, args ...string) string {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
 	}
 	return strings.TrimSpace(string(output))
+}
+
+func runGitStdout(t *testing.T, dir string, env []string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = env
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("git %s: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(args, " "), err, stdout.String(), stderr.String())
+	}
+	return strings.TrimSpace(stdout.String())
 }

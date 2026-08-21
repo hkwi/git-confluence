@@ -11,6 +11,7 @@ import (
 	"github.com/hkwi/git-confluence/internal/attachment"
 	"github.com/hkwi/git-confluence/internal/confluence"
 	"github.com/hkwi/git-confluence/internal/logging"
+	"github.com/hkwi/git-confluence/internal/pagecache"
 )
 
 func filterClean(path string, input io.Reader, output, errorOutput io.Writer, maxInput int64, maxDepth int) error {
@@ -27,6 +28,24 @@ func filterClean(path string, input io.Reader, output, errorOutput io.Writer, ma
 		"purpose", "normalize_for_git",
 	)
 	logger.Info("clean filter started", "bytes", len(data))
+	cache, err := pagecache.Open()
+	if err != nil {
+		return err
+	}
+	originalStorage, ok, err := cache.Original(data, path)
+	if err != nil {
+		return fmt.Errorf("read cached original Confluence storage: %w", err)
+	}
+	if ok {
+		logger.Info("clean filter restored original storage", "bytes", len(originalStorage), "source", "page_cache")
+		_, err = output.Write(originalStorage)
+		return err
+	}
+	if pagecache.MatchesIndex(path, data) {
+		logger.Info("clean filter preserved indexed storage", "bytes", len(data), "source", "git_index")
+		_, err = output.Write(data)
+		return err
+	}
 	storage, err := confluence.MarkdownToStorageWithMaxDepth(string(data), maxDepth)
 	if err != nil {
 		return err
@@ -55,6 +74,13 @@ func filterSmudge(path string, input io.Reader, output, errorOutput io.Writer, m
 	markdown, err := confluence.StorageToMarkdownWithMaxDepth(string(data), maxDepth)
 	if err != nil {
 		return err
+	}
+	cache, err := pagecache.Open()
+	if err != nil {
+		return err
+	}
+	if err := cache.Remember([]byte(markdown), path, data); err != nil {
+		return fmt.Errorf("cache original Confluence storage: %w", err)
 	}
 	_, err = io.WriteString(output, markdown)
 	if err == nil {

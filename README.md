@@ -177,6 +177,15 @@ The clean filter normalizes worktree content for Git comparison or storage;
 the smudge filter materializes Git content in the worktree. This makes a slow
 page conversion distinguishable from an attachment download.
 
+Page smudge stores the exact source storage XML below
+`$GIT_DIR/confluence/pages`. When the resulting Markdown is unchanged, clean
+restores those exact bytes instead of regenerating XML. Edited Markdown is
+converted normally. This keeps an untouched checkout clean even when its source
+contains Confluence attributes that Markdown cannot represent. If the filter is
+installed after a normal checkout, an existing working file identical to its
+index blob is also passed through unchanged until it is explicitly checked out
+through smudge.
+
 Materialize all attachments, or selected paths, after checkout:
 
 ```sh
