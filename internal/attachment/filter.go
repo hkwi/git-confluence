@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hkwi/git-confluence/internal/logging"
 )
 
 const (
@@ -44,13 +46,14 @@ func Smudge(pointerData []byte, worktreePath string, output, errorOutput io.Writ
 	}
 	pat := resolvePAT()
 	if pat == "" {
-		fmt.Fprintln(errorOutput, "git-confluence: Confluence PAT is not configured; leaving attachment pointer in working tree")
+		logging.New(errorOutput).Warn("Confluence PAT is not configured; leaving attachment pointer in working tree", "app", "git-confluence")
 		_, err = output.Write(canonical)
 		return err
 	}
 	path, err := download(cache, pointer, canonical, worktreePath, pat, errorOutput)
 	if err != nil {
-		fmt.Fprintf(errorOutput, "git-confluence: attachment %q: %v; leaving attachment pointer in working tree\n", worktreePath, err)
+		logging.New(errorOutput).Warn("attachment download failed; leaving attachment pointer in working tree",
+			"app", "git-confluence", "path", worktreePath, "error", err)
 		_, writeErr := output.Write(canonical)
 		return writeErr
 	}
@@ -112,6 +115,7 @@ func Clean(input io.Reader, worktreePath string, output io.Writer) error {
 }
 
 func download(cache cache, pointer Pointer, canonical []byte, worktreePath, pat string, warningOutput io.Writer) (string, error) {
+	logger := logging.New(warningOutput)
 	downloadURL, err := pointer.DownloadURL()
 	if err != nil {
 		return "", err
@@ -160,7 +164,9 @@ func download(cache cache, pointer Pointer, canonical []byte, worktreePath, pat 
 		return "", fmt.Errorf("attachment exceeds %d bytes; set %s to a larger byte count", maxBytes, maxAttachmentEnv)
 	}
 	if pointer.Size > 0 && written != pointer.Size {
-		fmt.Fprintf(warningOutput, "git-confluence: warning: attachment %q: pointer size is %d bytes, but downloaded content is %d bytes; using downloaded content\n", worktreePath, pointer.Size, written)
+		logger.Warn("attachment size differs from pointer; using downloaded content",
+			"app", "git-confluence", "path", worktreePath,
+			"pointer_size", pointer.Size, "downloaded_size", written)
 	}
 	oid := hex.EncodeToString(hash.Sum(nil))
 	return cache.store(tempPath, oid, worktreePath, canonical)

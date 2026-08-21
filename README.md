@@ -25,7 +25,7 @@ Git remote. Page bodies are stored in Git as Confluence storage XML.
 5. The clean filter converts Markdown back to Confluence storage XML.
 6. `git-remote-confluence` pushes the committed XML to existing Confluence page bodies.
 
-Attachment pointers remain small text files when the filter is not configured,
+Attachment pointers remain small YAML files when the filter is not configured,
 the PAT is unavailable, or smudge is explicitly skipped. With the filter
 configured, checkout downloads attachment bytes into a local Git-specific cache
 and exposes them at their normal paths. Attachment changes are read-only until
@@ -49,6 +49,8 @@ For attachments:
 | Git blob | Confluence attachment pointer |
 | Working tree after checkout | Attachment bytes, or pointer when unavailable/skipped |
 | Index after `git add` | Original attachment pointer |
+
+Attachment pointers use the `attachment/v1` YAML schema.
 
 This split preserves storage XML for Confluence synchronization while allowing
 people to edit Markdown.

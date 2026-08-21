@@ -1,13 +1,14 @@
 package attachment
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"go.yaml.in/yaml/v3"
 )
 
 const SpecURL = "https://github.com/hkwi/git-remote-confluence/spec/attachment/v1"
@@ -23,64 +24,42 @@ type Pointer struct {
 	DownloadPath      string
 }
 
+type pointerYAML struct {
+	Version           string `yaml:"version"`
+	SourceURL         string `yaml:"source"`
+	PageID            string `yaml:"page_id"`
+	AttachmentID      string `yaml:"attachment_id"`
+	AttachmentVersion int    `yaml:"attachment_version"`
+	Filename          string `yaml:"filename"`
+	Size              int64  `yaml:"size"`
+	MediaType         string `yaml:"media_type,omitempty"`
+	DownloadPath      string `yaml:"download_path"`
+}
+
 func IsPointer(data []byte) bool {
-	first, _, _ := bytes.Cut(data, []byte{'\n'})
-	return string(bytes.TrimSuffix(first, []byte{'\r'})) == "version "+SpecURL
+	var marker struct {
+		Version string `yaml:"version"`
+	}
+	return yaml.Unmarshal(data, &marker) == nil && marker.Version == SpecURL
 }
 
 func ParsePointer(data []byte) (Pointer, error) {
-	if !IsPointer(data) {
-		return Pointer{}, fmt.Errorf("not a Confluence attachment pointer")
+	var document pointerYAML
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return Pointer{}, fmt.Errorf("parse Confluence attachment pointer YAML: %w", err)
 	}
-	values := map[string]string{}
-	knownFields := map[string]bool{
-		"version":            true,
-		"source":             true,
-		"page-id":            true,
-		"attachment-id":      true,
-		"attachment-version": true,
-		"filename":           true,
-		"size":               true,
-		"media-type":         true,
-		"download-path":      true,
-	}
-	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
-	for index, line := range lines {
-		if line == "" {
-			continue
-		}
-		key, value, ok := strings.Cut(line, " ")
-		if !ok || value == "" {
-			return Pointer{}, fmt.Errorf("invalid pointer line %d", index+1)
-		}
-		if !knownFields[key] {
-			return Pointer{}, fmt.Errorf("unknown pointer field %q", key)
-		}
-		if _, exists := values[key]; exists {
-			return Pointer{}, fmt.Errorf("duplicate pointer field %q", key)
-		}
-		values[key] = value
-	}
-	if values["version"] != SpecURL {
-		return Pointer{}, fmt.Errorf("unsupported attachment pointer version %q", values["version"])
-	}
-	version, err := strconv.Atoi(values["attachment-version"])
-	if err != nil || version <= 0 {
-		return Pointer{}, fmt.Errorf("invalid attachment-version %q", values["attachment-version"])
-	}
-	size, err := strconv.ParseInt(values["size"], 10, 64)
-	if err != nil || size < 0 {
-		return Pointer{}, fmt.Errorf("invalid attachment size %q", values["size"])
+	if document.Version != SpecURL {
+		return Pointer{}, fmt.Errorf("unsupported attachment pointer version %q", document.Version)
 	}
 	pointer := Pointer{
-		SourceURL:         values["source"],
-		PageID:            values["page-id"],
-		AttachmentID:      values["attachment-id"],
-		AttachmentVersion: version,
-		Filename:          values["filename"],
-		Size:              size,
-		MediaType:         values["media-type"],
-		DownloadPath:      values["download-path"],
+		SourceURL:         document.SourceURL,
+		PageID:            document.PageID,
+		AttachmentID:      document.AttachmentID,
+		AttachmentVersion: document.AttachmentVersion,
+		Filename:          document.Filename,
+		Size:              document.Size,
+		MediaType:         document.MediaType,
+		DownloadPath:      document.DownloadPath,
 	}
 	if err := pointer.validate(); err != nil {
 		return Pointer{}, err
@@ -89,19 +68,21 @@ func ParsePointer(data []byte) (Pointer, error) {
 }
 
 func (p Pointer) Canonical() []byte {
-	var out strings.Builder
-	fmt.Fprintf(&out, "version %s\n", SpecURL)
-	fmt.Fprintf(&out, "source %s\n", strings.TrimRight(p.SourceURL, "/"))
-	fmt.Fprintf(&out, "page-id %s\n", p.PageID)
-	fmt.Fprintf(&out, "attachment-id %s\n", p.AttachmentID)
-	fmt.Fprintf(&out, "attachment-version %d\n", p.AttachmentVersion)
-	fmt.Fprintf(&out, "filename %s\n", p.Filename)
-	fmt.Fprintf(&out, "size %d\n", p.Size)
-	if p.MediaType != "" {
-		fmt.Fprintf(&out, "media-type %s\n", p.MediaType)
+	data, err := yaml.Marshal(pointerYAML{
+		Version:           SpecURL,
+		SourceURL:         strings.TrimRight(p.SourceURL, "/"),
+		PageID:            p.PageID,
+		AttachmentID:      p.AttachmentID,
+		AttachmentVersion: p.AttachmentVersion,
+		Filename:          p.Filename,
+		Size:              p.Size,
+		MediaType:         p.MediaType,
+		DownloadPath:      p.DownloadPath,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("marshal Confluence attachment pointer: %v", err))
 	}
-	fmt.Fprintf(&out, "download-path %s\n", p.DownloadPath)
-	return []byte(out.String())
+	return data
 }
 
 func (p Pointer) DownloadURL() (*url.URL, error) {

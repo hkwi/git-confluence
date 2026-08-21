@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/hkwi/git-confluence/internal/confluence"
+	"github.com/hkwi/git-confluence/internal/logging"
 )
 
 const (
@@ -30,18 +31,21 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "help":
+		fmt.Print(helpOutput())
+		return
 	case "version", "--version", "-version":
 		fmt.Print(versionOutput())
 		return
 	case "install":
 		if err := installFilter(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
+			logError(err)
 			os.Exit(1)
 		}
 		return
 	case "pull":
 		if err := pullFiles(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
+			logError(err)
 			os.Exit(1)
 		}
 		return
@@ -49,13 +53,13 @@ func main() {
 
 	maxInput, err := maxInputBytes()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
+		logError(err)
 		os.Exit(2)
 	}
 
 	maxDepth, err := maxRecursionDepth()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
+		logError(err)
 		os.Exit(2)
 	}
 
@@ -101,12 +105,20 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: %s clean|smudge|filter-clean <path>|filter-smudge <path>|install [--global|--local]|pull [path...]|version\n", appName)
+	fmt.Fprint(os.Stderr, helpOutput())
+}
+
+func helpOutput() string {
+	return fmt.Sprintf("usage: %s clean|smudge|filter-clean <path>|filter-smudge <path>|install [--global|--local]|pull [path...]|version|help\n", appName)
 }
 
 func fail(err error) {
-	fmt.Fprintf(os.Stderr, "%s: %v\n", appName, err)
+	logError(err)
 	os.Exit(1)
+}
+
+func logError(err error) {
+	logging.New(os.Stderr).Error(err.Error(), "app", appName)
 }
 
 func versionOutput() string {

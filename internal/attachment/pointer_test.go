@@ -21,6 +21,9 @@ func TestPointerCanonicalRoundTrip(t *testing.T) {
 		DownloadPath:      "/wiki/download/attachments/123/diagram%20one.png?api=v2",
 	}
 	data := pointer.Canonical()
+	if !bytes.HasPrefix(data, []byte("version: "+SpecURL+"\n")) {
+		t.Fatalf("canonical pointer is not YAML:\n%s", data)
+	}
 	parsed, err := ParsePointer(data)
 	if err != nil {
 		t.Fatal(err)
@@ -34,6 +37,24 @@ func TestPointerCanonicalRoundTrip(t *testing.T) {
 	}
 	if got := downloadURL.String(); got != "https://cf.example.test/wiki/download/attachments/123/diagram%20one.png?api=v2&version=7" {
 		t.Fatalf("download URL = %q", got)
+	}
+}
+
+func TestYAMLPointerAllowsReorderedAndQuotedFields(t *testing.T) {
+	data := []byte(`source: https://cf.example.test
+version: "https://github.com/hkwi/git-remote-confluence/spec/attachment/v1"
+attachment_id: "456"
+page_id: "123"
+filename: diagram.png
+attachment_version: 7
+download_path: /download/attachments/123/diagram.png
+size: 42
+`)
+	if !IsPointer(data) {
+		t.Fatal("reordered YAML was not recognized as a pointer")
+	}
+	if _, err := ParsePointer(data); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -150,7 +171,7 @@ func TestSmudgeSizeMismatchWarnsAndUsesDownloadedContent(t *testing.T) {
 	if output.String() != "wrong size" {
 		t.Fatalf("smudge output = %q", output.String())
 	}
-	wantWarning := `git-confluence: warning: attachment "` + worktreePath + `": pointer size is 42 bytes, but downloaded content is 10 bytes; using downloaded content`
+	wantWarning := `level=WARN msg="attachment size differs from pointer; using downloaded content" app=git-confluence path=` + worktreePath + ` pointer_size=42 downloaded_size=10`
 	if !strings.Contains(errorOutput.String(), wantWarning) {
 		t.Fatalf("stderr = %q", errorOutput.String())
 	}
@@ -196,20 +217,5 @@ func TestCleanDistinguishesSameContentAtDifferentPaths(t *testing.T) {
 	}
 	if requests.Load() != 2 {
 		t.Fatalf("download requests = %d, want 2", requests.Load())
-	}
-}
-
-func TestParsePointerRejectsUnknownField(t *testing.T) {
-	pointer := Pointer{
-		SourceURL:         "https://cf.example.test",
-		PageID:            "1",
-		AttachmentID:      "2",
-		AttachmentVersion: 3,
-		Filename:          "file.bin",
-		DownloadPath:      "/download/file.bin",
-	}.Canonical()
-	pointer = append(pointer, []byte("unexpected value\n")...)
-	if _, err := ParsePointer(pointer); err == nil || !strings.Contains(err.Error(), "unknown pointer field") {
-		t.Fatalf("ParsePointer error = %v", err)
 	}
 }

@@ -68,6 +68,14 @@ func TestVersionOutput(t *testing.T) {
 	}
 }
 
+func TestHelpOutput(t *testing.T) {
+	got := helpOutput()
+	want := "usage: git-confluence clean|smudge|filter-clean <path>|filter-smudge <path>|install [--global|--local]|pull [path...]|version|help\n"
+	if got != want {
+		t.Fatalf("helpOutput() = %q, want %q", got, want)
+	}
+}
+
 func TestUnifiedFilterMaterializesAttachmentAndCleansBackToPointer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/download/file.bin" || r.URL.Query().Get("version") != "3" {
