@@ -167,13 +167,15 @@ the working-tree path, attachment ID, and version, and reports cache hits and
 download progress without exposing the Confluence PAT:
 
 ```text
-level=INFO msg="downloading attachment" app=git-confluence path=123/attachments/diagram.png attachment_id=456 attachment_version=2
-level=INFO msg="downloaded attachment" app=git-confluence path=123/attachments/diagram.png attachment_id=456 attachment_version=2 bytes=42000
+level=INFO msg="downloading attachment" app=git-confluence path=123/attachments/diagram.png attachment_id=456 attachment_version=2 filter=smudge direction=attachment_pointer_to_bytes purpose=materialize_worktree
+level=INFO msg="downloaded attachment" app=git-confluence path=123/attachments/diagram.png attachment_id=456 attachment_version=2 filter=smudge direction=attachment_pointer_to_bytes purpose=materialize_worktree bytes=42000
 ```
 
 Page clean and smudge conversion also reports start and completion records,
-including the path and input or output byte count. This makes a slow page
-conversion distinguishable from an attachment download.
+including the path, filter, direction, purpose, and input or output byte count.
+The clean filter normalizes worktree content for Git comparison or storage;
+the smudge filter materializes Git content in the worktree. This makes a slow
+page conversion distinguishable from an attachment download.
 
 Materialize all attachments, or selected paths, after checkout:
 

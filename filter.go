@@ -21,15 +21,19 @@ func filterClean(path string, input io.Reader, output, errorOutput io.Writer, ma
 	if err != nil {
 		return err
 	}
-	logger := logging.New(errorOutput).With("app", "git-confluence", "path", path)
-	logger.Info("converting Markdown to Confluence storage", "bytes", len(data))
+	logger := logging.New(errorOutput).With(
+		"app", "git-confluence", "path", path,
+		"filter", "clean", "direction", "markdown_to_confluence_storage",
+		"purpose", "normalize_for_git",
+	)
+	logger.Info("clean filter started", "bytes", len(data))
 	storage, err := confluence.MarkdownToStorageWithMaxDepth(string(data), maxDepth)
 	if err != nil {
 		return err
 	}
 	_, err = io.WriteString(output, storage)
 	if err == nil {
-		logger.Info("converted Markdown to Confluence storage", "bytes", len(storage))
+		logger.Info("clean filter completed", "bytes", len(storage))
 	}
 	return err
 }
@@ -42,15 +46,19 @@ func filterSmudge(path string, input io.Reader, output, errorOutput io.Writer, m
 	if isAttachmentPath(path) || attachment.IsPointer(data) {
 		return attachment.Smudge(data, path, output, errorOutput)
 	}
-	logger := logging.New(errorOutput).With("app", "git-confluence", "path", path)
-	logger.Info("converting Confluence storage to Markdown", "bytes", len(data))
+	logger := logging.New(errorOutput).With(
+		"app", "git-confluence", "path", path,
+		"filter", "smudge", "direction", "confluence_storage_to_markdown",
+		"purpose", "materialize_worktree",
+	)
+	logger.Info("smudge filter started", "bytes", len(data))
 	markdown, err := confluence.StorageToMarkdownWithMaxDepth(string(data), maxDepth)
 	if err != nil {
 		return err
 	}
 	_, err = io.WriteString(output, markdown)
 	if err == nil {
-		logger.Info("converted Confluence storage to Markdown", "bytes", len(markdown))
+		logger.Info("smudge filter completed", "bytes", len(markdown))
 	}
 	return err
 }

@@ -35,6 +35,9 @@ func Smudge(pointerData []byte, worktreePath string, output, errorOutput io.Writ
 		"path", worktreePath,
 		"attachment_id", pointer.AttachmentID,
 		"attachment_version", pointer.AttachmentVersion,
+		"filter", "smudge",
+		"direction", "attachment_pointer_to_bytes",
+		"purpose", "materialize_worktree",
 	)
 	canonical := pointer.Canonical()
 	if os.Getenv(skipSmudgeEnv) != "" {
