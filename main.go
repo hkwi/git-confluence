@@ -88,7 +88,7 @@ func main() {
 		if len(os.Args) != 3 {
 			fail(fmt.Errorf("filter-clean requires a pathname"))
 		}
-		if err := filterClean(os.Args[2], os.Stdin, os.Stdout, maxInput, maxDepth); err != nil {
+		if err := filterClean(os.Args[2], os.Stdin, os.Stdout, os.Stderr, maxInput, maxDepth); err != nil {
 			fail(err)
 		}
 	case "filter-smudge":

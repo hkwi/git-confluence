@@ -171,6 +171,10 @@ level=INFO msg="downloading attachment" app=git-confluence path=123/attachments/
 level=INFO msg="downloaded attachment" app=git-confluence path=123/attachments/diagram.png attachment_id=456 attachment_version=2 bytes=42000
 ```
 
+Page clean and smudge conversion also reports start and completion records,
+including the path and input or output byte count. This makes a slow page
+conversion distinguishable from an attachment download.
+
 Materialize all attachments, or selected paths, after checkout:
 
 ```sh

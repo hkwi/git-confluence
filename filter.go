@@ -10,9 +10,10 @@ import (
 
 	"github.com/hkwi/git-confluence/internal/attachment"
 	"github.com/hkwi/git-confluence/internal/confluence"
+	"github.com/hkwi/git-confluence/internal/logging"
 )
 
-func filterClean(path string, input io.Reader, output io.Writer, maxInput int64, maxDepth int) error {
+func filterClean(path string, input io.Reader, output, errorOutput io.Writer, maxInput int64, maxDepth int) error {
 	if isAttachmentPath(path) {
 		return attachment.Clean(input, path, output)
 	}
@@ -20,11 +21,16 @@ func filterClean(path string, input io.Reader, output io.Writer, maxInput int64,
 	if err != nil {
 		return err
 	}
+	logger := logging.New(errorOutput).With("app", "git-confluence", "path", path)
+	logger.Info("converting Markdown to Confluence storage", "bytes", len(data))
 	storage, err := confluence.MarkdownToStorageWithMaxDepth(string(data), maxDepth)
 	if err != nil {
 		return err
 	}
 	_, err = io.WriteString(output, storage)
+	if err == nil {
+		logger.Info("converted Markdown to Confluence storage", "bytes", len(storage))
+	}
 	return err
 }
 
@@ -36,11 +42,16 @@ func filterSmudge(path string, input io.Reader, output, errorOutput io.Writer, m
 	if isAttachmentPath(path) || attachment.IsPointer(data) {
 		return attachment.Smudge(data, path, output, errorOutput)
 	}
+	logger := logging.New(errorOutput).With("app", "git-confluence", "path", path)
+	logger.Info("converting Confluence storage to Markdown", "bytes", len(data))
 	markdown, err := confluence.StorageToMarkdownWithMaxDepth(string(data), maxDepth)
 	if err != nil {
 		return err
 	}
 	_, err = io.WriteString(output, markdown)
+	if err == nil {
+		logger.Info("converted Confluence storage to Markdown", "bytes", len(markdown))
+	}
 	return err
 }
 

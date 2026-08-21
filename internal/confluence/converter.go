@@ -515,7 +515,7 @@ func collectListAtIndent(lines []string, start, indent int, ordered bool, depth,
 				i++
 				continue
 			}
-			if lineIndent(lines[i]) <= indent {
+			if lineIndent(lines[i]) < indent+2 {
 				break
 			}
 			blockLines, nextIndex := collectListContinuation(lines, i, indent+2)
