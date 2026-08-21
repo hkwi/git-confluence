@@ -87,11 +87,21 @@ func TestSmudgeDownloadsCachesAndCleanRestoresPointer(t *testing.T) {
 
 	for attempt := 0; attempt < 2; attempt++ {
 		var output bytes.Buffer
-		if err := Smudge(pointer, "123/attachments/file.bin", &output, &bytes.Buffer{}); err != nil {
+		var logs bytes.Buffer
+		if err := Smudge(pointer, "123/attachments/file.bin", &output, &logs); err != nil {
 			t.Fatal(err)
 		}
 		if output.String() != "attachment data" {
 			t.Fatalf("smudge output = %q", output.String())
+		}
+		if !strings.Contains(logs.String(), `level=INFO msg="materializing attachment" app=git-confluence path=123/attachments/file.bin attachment_id=456 attachment_version=2`) {
+			t.Fatalf("materialization log missing:\n%s", logs.String())
+		}
+		if attempt == 0 && !strings.Contains(logs.String(), `level=INFO msg="downloaded attachment" app=git-confluence path=123/attachments/file.bin attachment_id=456 attachment_version=2 bytes=15`) {
+			t.Fatalf("download log missing:\n%s", logs.String())
+		}
+		if attempt == 1 && !strings.Contains(logs.String(), `level=INFO msg="using cached attachment" app=git-confluence path=123/attachments/file.bin attachment_id=456 attachment_version=2`) {
+			t.Fatalf("cache log missing:\n%s", logs.String())
 		}
 	}
 	t.Setenv("CONFLUENCE_PAT", "")
@@ -171,7 +181,7 @@ func TestSmudgeSizeMismatchWarnsAndUsesDownloadedContent(t *testing.T) {
 	if output.String() != "wrong size" {
 		t.Fatalf("smudge output = %q", output.String())
 	}
-	wantWarning := `level=WARN msg="attachment size differs from pointer; using downloaded content" app=git-confluence path=` + worktreePath + ` pointer_size=42 downloaded_size=10`
+	wantWarning := `level=WARN msg="attachment size differs from pointer; using downloaded content" app=git-confluence path=` + worktreePath + ` attachment_id=2 attachment_version=3 pointer_size=42 downloaded_size=10`
 	if !strings.Contains(errorOutput.String(), wantWarning) {
 		t.Fatalf("stderr = %q", errorOutput.String())
 	}

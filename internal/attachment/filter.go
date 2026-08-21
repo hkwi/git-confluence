@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -29,16 +30,24 @@ func Smudge(pointerData []byte, worktreePath string, output, errorOutput io.Writ
 	if err != nil {
 		return err
 	}
+	logger := logging.New(errorOutput).With(
+		"app", "git-confluence",
+		"path", worktreePath,
+		"attachment_id", pointer.AttachmentID,
+		"attachment_version", pointer.AttachmentVersion,
+	)
 	canonical := pointer.Canonical()
 	if os.Getenv(skipSmudgeEnv) != "" {
 		_, err = output.Write(canonical)
 		return err
 	}
+	logger.Info("materializing attachment")
 	cache, err := openCache()
 	if err != nil {
 		return err
 	}
 	if path, ok := cache.lookupPointer(canonical); ok {
+		logger.Info("using cached attachment")
 		if err := cache.remember(filepath.Base(path), worktreePath, canonical); err != nil {
 			return err
 		}
@@ -46,14 +55,13 @@ func Smudge(pointerData []byte, worktreePath string, output, errorOutput io.Writ
 	}
 	pat := resolvePAT()
 	if pat == "" {
-		logging.New(errorOutput).Warn("Confluence PAT is not configured; leaving attachment pointer in working tree", "app", "git-confluence")
+		logger.Warn("Confluence PAT is not configured; leaving attachment pointer in working tree")
 		_, err = output.Write(canonical)
 		return err
 	}
-	path, err := download(cache, pointer, canonical, worktreePath, pat, errorOutput)
+	path, err := download(cache, pointer, canonical, worktreePath, pat, logger)
 	if err != nil {
-		logging.New(errorOutput).Warn("attachment download failed; leaving attachment pointer in working tree",
-			"app", "git-confluence", "path", worktreePath, "error", err)
+		logger.Warn("attachment download failed; leaving attachment pointer in working tree", "error", err)
 		_, writeErr := output.Write(canonical)
 		return writeErr
 	}
@@ -114,8 +122,7 @@ func Clean(input io.Reader, worktreePath string, output io.Writer) error {
 	return err
 }
 
-func download(cache cache, pointer Pointer, canonical []byte, worktreePath, pat string, warningOutput io.Writer) (string, error) {
-	logger := logging.New(warningOutput)
+func download(cache cache, pointer Pointer, canonical []byte, worktreePath, pat string, logger *slog.Logger) (string, error) {
 	downloadURL, err := pointer.DownloadURL()
 	if err != nil {
 		return "", err
@@ -133,6 +140,7 @@ func download(cache cache, pointer Pointer, canonical []byte, worktreePath, pat 
 		}
 		return nil
 	}
+	logger.Info("downloading attachment")
 	response, err := client.Do(request)
 	if err != nil {
 		return "", fmt.Errorf("download attachment %s version %d: %w", pointer.AttachmentID, pointer.AttachmentVersion, err)
@@ -141,6 +149,7 @@ func download(cache cache, pointer Pointer, canonical []byte, worktreePath, pat 
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return "", fmt.Errorf("download attachment %s version %d: HTTP %d", pointer.AttachmentID, pointer.AttachmentVersion, response.StatusCode)
 	}
+	logger.Info("receiving attachment", "status", response.StatusCode)
 	maxBytes, err := maxAttachmentBytes()
 	if err != nil {
 		return "", err
@@ -165,11 +174,14 @@ func download(cache cache, pointer Pointer, canonical []byte, worktreePath, pat 
 	}
 	if pointer.Size > 0 && written != pointer.Size {
 		logger.Warn("attachment size differs from pointer; using downloaded content",
-			"app", "git-confluence", "path", worktreePath,
 			"pointer_size", pointer.Size, "downloaded_size", written)
 	}
 	oid := hex.EncodeToString(hash.Sum(nil))
-	return cache.store(tempPath, oid, worktreePath, canonical)
+	path, err := cache.store(tempPath, oid, worktreePath, canonical)
+	if err == nil {
+		logger.Info("downloaded attachment", "bytes", written)
+	}
+	return path, err
 }
 
 func copyFile(path string, output io.Writer) error {

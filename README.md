@@ -162,6 +162,15 @@ Keep attachment pointers while still converting page XML to Markdown:
 GIT_CONFLUENCE_SKIP_SMUDGE=1 git checkout
 ```
 
+Attachment checkout progress is written to stderr as logfmt. Each record names
+the working-tree path, attachment ID, and version, and reports cache hits and
+download progress without exposing the Confluence PAT:
+
+```text
+level=INFO msg="downloading attachment" app=git-confluence path=123/attachments/diagram.png attachment_id=456 attachment_version=2
+level=INFO msg="downloaded attachment" app=git-confluence path=123/attachments/diagram.png attachment_id=456 attachment_version=2 bytes=42000
+```
+
 Materialize all attachments, or selected paths, after checkout:
 
 ```sh
